@@ -44,7 +44,7 @@ func (e *Editor) ProcessEvent(ev *tcell.EventKey) {
 // // Editor: cursor methods
 
 func (e *Editor) CurRight() {
-	e.cursor.right(len(e.currentLine().buf))
+	e.cursor.right(e.currentLine().len())
 }
 
 func (e *Editor) CurLeft() {
@@ -52,11 +52,17 @@ func (e *Editor) CurLeft() {
 }
 
 func (e *Editor) CurDown() {
-	e.cursor.down(len(e.lines))
+	if e.cursor.y == len(e.lines)-1 {
+		return
+	}
+	e.cursor.down(e.lines[e.cursor.y+1].len())
 }
 
 func (e *Editor) CurUp() {
-	e.cursor.up()
+	if e.cursor.y == 0 {
+		return
+	}
+	e.cursor.up(e.lines[e.cursor.y-1].len())
 }
 
 func (e *Editor) ShowCursor(screen tcell.Screen) {
@@ -135,7 +141,7 @@ func (ln *line) writeChar(char rune, cx int) {
 
 	// if cx points at the end of buf, just append.
 	// otherwise, insert.
-	if cx == len(ln.buf) {
+	if cx == ln.len() {
 		ln.buf = append(ln.buf, char)
 	} else {
 		ln.buf = append(ln.buf[:cx], append([]rune{char}, ln.buf[cx:]...)...)
@@ -144,7 +150,7 @@ func (ln *line) writeChar(char rune, cx int) {
 
 // backspace deletes the char that is to the left of cursor position cx.
 func (ln *line) backspace(cx int) bool {
-	if len(ln.buf) == 0 || cx == 0 {
+	if ln.len() == 0 || cx == 0 {
 		return false
 	}
 
@@ -164,18 +170,25 @@ func (ln *line) show(screen tcell.Screen) {
 	}
 }
 
+// len returns the length of line buffer.
+func (ln *line) len() int {
+	return len(ln.buf)
+}
+
 // // cursor
 type cursor struct {
 	baseX, baseY int
 	x, y         int
+	goalCol      int
 }
 
 func newCursor(x, y int) *cursor {
 	return &cursor{
-		baseX: x,
-		baseY: y,
-		x:     0,
-		y:     0,
+		baseX:   x,
+		baseY:   y,
+		x:       0,
+		y:       0,
+		goalCol: 0,
 	}
 }
 
@@ -185,6 +198,7 @@ func (c *cursor) right(lnLen int) {
 		return
 	}
 	c.x++
+	c.goalCol = c.x
 }
 
 func (c *cursor) left() {
@@ -192,24 +206,17 @@ func (c *cursor) left() {
 		return
 	}
 	c.x--
+	c.goalCol = c.x
 }
 
-func (c *cursor) down(numLines int) {
-	if c.y == numLines-1 {
-		return
-	}
+func (c *cursor) down(lnLen int) {
 	c.y++
-	// TEMP move cursor to line start
-	c.x = 0
+	c.x = min(c.goalCol, lnLen)
 }
 
-func (c *cursor) up() {
-	if c.y == 0 {
-		return
-	}
+func (c *cursor) up(lnLen int) {
 	c.y--
-	// TEMP move cursor to line start
-	c.x = 0
+	c.x = min(c.goalCol, lnLen)
 }
 
 func (c *cursor) show(screen tcell.Screen) {
