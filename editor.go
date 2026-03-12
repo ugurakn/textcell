@@ -44,14 +44,13 @@ func (e *Editor) ProcessEvent(ev *tcell.EventKey) {
 // // Editor: cursor methods
 
 func (e *Editor) CurRight() {
-	e.cursor.right(e.currentLine().length)
+	e.cursor.right(len(e.currentLine().buf))
 }
 
 func (e *Editor) CurLeft() {
 	e.cursor.left()
 }
 
-// TODO
 func (e *Editor) CurDown() {
 	e.cursor.down(len(e.lines))
 }
@@ -83,6 +82,11 @@ func (e *Editor) NewLine() {
 		}
 	}
 
+	// carry text to right of cursor to the new line
+	curLine := e.currentLine()
+	newLn.buf = append(newLn.buf, curLine.buf[e.cursor.x:]...)
+	curLine.buf = curLine.buf[:e.cursor.x]
+
 	// reposition cursor to start of new line
 	e.cursor.x = 0
 	e.cursor.y++
@@ -113,14 +117,12 @@ func (e *Editor) currentLine() *line {
 // line represents a single line of text.
 type line struct {
 	buf          []rune
-	length       int
 	baseX, baseY int
 }
 
 func newLine(baseX, baseY int) *line {
 	ln := new(line)
 	ln.buf = make([]rune, 0, MaxCharsOnLine)
-	ln.length = 0
 	ln.baseX = baseX
 	ln.baseY = baseY
 	return ln
@@ -133,27 +135,25 @@ func (ln *line) writeChar(char rune, cx int) {
 
 	// if cx points at the end of buf, just append.
 	// otherwise, insert.
-	if cx == ln.length {
+	if cx == len(ln.buf) {
 		ln.buf = append(ln.buf, char)
 	} else {
 		ln.buf = append(ln.buf[:cx], append([]rune{char}, ln.buf[cx:]...)...)
 	}
-	ln.length++
 }
 
 // backspace deletes the char that is to the left of cursor position cx.
 func (ln *line) backspace(cx int) bool {
-	if ln.length == 0 || cx == 0 {
+	if len(ln.buf) == 0 || cx == 0 {
 		return false
 	}
 
 	ln.buf = append(ln.buf[:cx-1], ln.buf[cx:]...)
-	ln.length--
 	return true
 }
 
 func (ln *line) show(screen tcell.Screen) {
-	for i := range ln.length {
+	for i := range ln.buf {
 		screen.SetContent(
 			ln.baseX+i,
 			ln.baseY,
