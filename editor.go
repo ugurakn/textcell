@@ -26,20 +26,46 @@ func NewEditor(baseX, baseY int) *Editor {
 func (e *Editor) CurRight() {
 	e.cursor.right(e.currentLine().length)
 }
+
 func (e *Editor) CurLeft() {
 	e.cursor.left()
 }
+
+// TODO
+func (e *Editor) CurDown() {
+	e.cursor.down(len(e.lines))
+}
+
+func (e *Editor) CurUp() {
+	e.cursor.up()
+}
+
 func (e *Editor) ShowCursor(screen tcell.Screen) {
 	e.cursor.show(screen)
 }
 
 // // Editor: line methods
 
-// TODO
 // NewLine creates a new line under cursor y
 // and moves cursor to new line.
 func (e *Editor) NewLine() {
-	panic("(*Editor).NewLine not implemented yet")
+	newLn := newLine(e.x, e.y+e.cursor.y+1)
+	if len(e.lines)-1 == e.cursor.y {
+		e.lines = append(e.lines, newLn)
+	} else {
+		e.lines = append(
+			e.lines[:e.cursor.y+1],
+			append([]*line{newLn}, e.lines[e.cursor.y+1:]...)...,
+		)
+		// update y for lines after new line
+		for _, ln := range e.lines[e.cursor.y+2:] {
+			ln.baseY++
+		}
+	}
+
+	// reposition cursor to start of new line
+	e.cursor.x = 0
+	e.cursor.y++
 }
 
 func (e *Editor) WriteChar(char rune) {
@@ -59,8 +85,7 @@ func (e *Editor) ShowText(screen tcell.Screen) {
 
 // // Editor: helper methods
 
-// currentLine returns the line on which
-// the cursor is currently placed.
+// currentLine returns the line the cursor is on.
 func (e *Editor) currentLine() *line {
 	return e.lines[e.cursor.y]
 }
@@ -72,12 +97,12 @@ type line struct {
 	baseX, baseY int
 }
 
-func newLine(x, y int) *line {
+func newLine(baseX, baseY int) *line {
 	ln := new(line)
-	ln.buf = make([]rune, MaxCharsOnLine)
+	ln.buf = make([]rune, 0, MaxCharsOnLine)
 	ln.length = 0
-	ln.baseX = x
-	ln.baseY = y
+	ln.baseX = baseX
+	ln.baseY = baseY
 	return ln
 }
 
@@ -89,7 +114,7 @@ func (ln *line) writeChar(char rune, cx int) {
 	// if cx points at the end of buf, just append.
 	// otherwise, insert.
 	if cx == ln.length {
-		ln.buf[cx] = char
+		ln.buf = append(ln.buf, char)
 	} else {
 		ln.buf = append(ln.buf[:cx], append([]rune{char}, ln.buf[cx:]...)...)
 	}
@@ -147,6 +172,24 @@ func (c *cursor) left() {
 		return
 	}
 	c.x--
+}
+
+func (c *cursor) down(numLines int) {
+	if c.y == numLines-1 {
+		return
+	}
+	c.y++
+	// TEMP move cursor to line start
+	c.x = 0
+}
+
+func (c *cursor) up() {
+	if c.y == 0 {
+		return
+	}
+	c.y--
+	// TEMP move cursor to line start
+	c.x = 0
 }
 
 func (c *cursor) show(screen tcell.Screen) {
