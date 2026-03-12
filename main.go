@@ -25,21 +25,20 @@ func main() {
 	for running {
 		screen.Clear()
 
-		var char rune
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
 			switch ev.Key() {
 			case tcell.KeyRune:
-				char = ev.Rune()
+				firstLine.WriteChar(ev.Rune())
+				cursorX++
+			case tcell.KeyBackspace:
+				if ok := firstLine.Backspace(); ok {
+					cursorX--
+				}
 			case tcell.KeyEsc:
 				running = false
 			}
-		}
-
-		if char > 0 {
-			firstLine.WriteChar(char)
-			cursorX++
 		}
 
 		// render text

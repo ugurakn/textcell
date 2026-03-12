@@ -23,6 +23,15 @@ func (ln *Line) WriteChar(char rune) {
 	ln.x++
 }
 
+// TODO must accept a cursor position when cursor can move.
+func (ln *Line) Backspace() bool {
+	if len(ln.buf) == 0 {
+		return false
+	}
+	ln.buf = ln.buf[:len(ln.buf)-1]
+	return true
+}
+
 func (ln *Line) Show(screen tcell.Screen) {
 	for i := range len(ln.buf) {
 		screen.SetContent(
