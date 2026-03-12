@@ -1,4 +1,4 @@
-module example.com/text_editor_tcell
+module github.com/ugurakn/textcell
 
 go 1.25.0
 

@@ -1,6 +1,10 @@
-package main
+package textcell
 
 import "github.com/gdamore/tcell/v2"
+
+const (
+	MaxCharsOnLine = 32
+)
 
 type Editor struct {
 	cursor *cursor
