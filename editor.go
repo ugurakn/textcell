@@ -2,17 +2,19 @@ package main
 
 import "github.com/gdamore/tcell/v2"
 
+const (
+	maxCharsOnLine = 64
+)
+
 // Line represents a single line of text.
 type Line struct {
 	buf []rune
-	// x is the current cursor position.
-	x, y int
+	y   int
 }
 
 func NewLine() *Line {
 	l := new(Line)
-	l.buf = make([]rune, 0, 64) // can hold 64 chars by default
-	l.x = 0
+	l.buf = make([]rune, 0, maxCharsOnLine) // can hold 64 chars by default
 	l.y = 0
 	return l
 }
@@ -20,7 +22,6 @@ func NewLine() *Line {
 func (ln *Line) WriteChar(char rune) {
 	// TODO bounds checking (do not grow buf)
 	ln.buf = append(ln.buf, char)
-	ln.x++
 }
 
 // TODO must accept a cursor position when cursor can move.
@@ -42,4 +43,30 @@ func (ln *Line) Show(screen tcell.Screen) {
 			tcell.StyleDefault,
 		)
 	}
+}
+
+// // Cursor
+type Cursor struct {
+	x, y int
+}
+
+func NewCursor(x, y int) *Cursor {
+	return &Cursor{x, y}
+}
+
+func (c *Cursor) Right() {
+	// if c.x < maxCharsOnLine-1 {
+	// 	c.x++
+	// }
+	c.x++
+}
+
+func (c *Cursor) Left() {
+	if c.x > 0 {
+		c.x--
+	}
+}
+
+func (c *Cursor) Show(screen tcell.Screen) {
+	screen.ShowCursor(c.x, c.y)
 }

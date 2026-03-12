@@ -1,6 +1,8 @@
 package main
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+)
 
 func main() {
 	screen, err := tcell.NewScreen()
@@ -15,10 +17,10 @@ func main() {
 	}
 
 	firstLine := NewLine()
-	cursorX := 0
+	cursor := NewCursor(0, 0)
 
 	// first render
-	screen.ShowCursor(cursorX, 0)
+	cursor.Show(screen)
 	screen.Show()
 
 	running := true
@@ -31,10 +33,14 @@ func main() {
 			switch ev.Key() {
 			case tcell.KeyRune:
 				firstLine.WriteChar(ev.Rune())
-				cursorX++
+				cursor.Right()
+			case tcell.KeyRight:
+				cursor.Right()
+			case tcell.KeyLeft:
+				cursor.Left()
 			case tcell.KeyBackspace:
 				if ok := firstLine.Backspace(); ok {
-					cursorX--
+					cursor.Left()
 				}
 			case tcell.KeyEsc:
 				running = false
@@ -44,8 +50,7 @@ func main() {
 		// render text
 		firstLine.Show(screen)
 
-		screen.ShowCursor(cursorX, 0)
-
+		cursor.Show(screen)
 		screen.Show()
 	}
 }
