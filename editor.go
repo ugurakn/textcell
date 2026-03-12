@@ -44,11 +44,33 @@ func (e *Editor) ProcessEvent(ev *tcell.EventKey) {
 // // Editor: cursor methods
 
 func (e *Editor) CurRight() {
-	e.cursor.right(e.currentLine().len())
+	c := e.cursor
+	if c.x == e.currentLine().len() {
+		// move to next line if it exists
+		if c.y == len(e.lines)-1 {
+			return
+		}
+		c.x = 0
+		c.y++
+	} else {
+		c.x++
+	}
+	c.goalCol = c.x
 }
 
 func (e *Editor) CurLeft() {
-	e.cursor.left()
+	c := e.cursor
+	if c.x == 0 {
+		// move to prev line if it exists
+		if c.y == 0 {
+			return
+		}
+		c.x = e.prevLine().len()
+		c.y--
+	} else {
+		c.x--
+	}
+	c.goalCol = c.x
 }
 
 func (e *Editor) CurDown() {
@@ -120,6 +142,17 @@ func (e *Editor) currentLine() *line {
 	return e.lines[e.cursor.y]
 }
 
+// prevLine returns the line that is above the current line
+// or nil if cursor is already on the top line.
+func (e *Editor) prevLine() *line {
+	if e.cursor.y == 0 {
+		return nil
+	}
+	return e.lines[e.cursor.y-1]
+}
+
+// func (e *Editor) nextLine() *line {}
+
 // line represents a single line of text.
 type line struct {
 	buf          []rune
@@ -190,23 +223,6 @@ func newCursor(x, y int) *cursor {
 		y:       0,
 		goalCol: 0,
 	}
-}
-
-func (c *cursor) right(lnLen int) {
-	// cursor can't move into 'empty' area to the right of its line
-	if c.x == lnLen {
-		return
-	}
-	c.x++
-	c.goalCol = c.x
-}
-
-func (c *cursor) left() {
-	if c.x <= 0 {
-		return
-	}
-	c.x--
-	c.goalCol = c.x
 }
 
 func (c *cursor) down(lnLen int) {
