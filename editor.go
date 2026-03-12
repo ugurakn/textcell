@@ -12,10 +12,11 @@ const (
 
 type Editor struct {
 	lines    []*line
+	screen   tcell.Screen
 	cursor   *cursor
 	x, y     int
+	scrollX  int
 	hasFocus bool
-	screen   tcell.Screen
 }
 
 // NewEditor creates and returns a new Editor without focus.
@@ -25,6 +26,7 @@ func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
 	e.lines = make([]*line, 0, 32)
 	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
+	e.scrollX = 0
 	e.hasFocus = false
 	e.screen = screen
 	return e
@@ -109,11 +111,12 @@ func (e *Editor) CurRight() {
 		if c.y == len(e.lines)-1 {
 			return
 		}
-		e.cursor.setCol(0)
+		e.setCurCol(0)
 		c.y++
 		return
 	}
-	e.cursor.setCol(c.x + 1)
+	// incr scrollX if cursor moved beyond MaxCharOnLine limit
+	e.setCurCol(c.x + 1)
 }
 
 func (e *Editor) CurLeft() {
@@ -123,11 +126,11 @@ func (e *Editor) CurLeft() {
 		if c.y == 0 {
 			return
 		}
-		e.cursor.setCol(e.prevLine().len())
+		e.setCurCol(e.prevLine().len())
 		c.y--
 		return
 	}
-	e.cursor.setCol(c.x - 1)
+	e.setCurCol(c.x - 1)
 }
 
 func (e *Editor) CurDown() {
@@ -135,6 +138,8 @@ func (e *Editor) CurDown() {
 		return
 	}
 	e.cursor.down(e.lines[e.cursor.y+1].len())
+	// TEMP because down modifies cursor.x:
+	e.calcScrollX()
 }
 
 func (e *Editor) CurUp() {
@@ -142,10 +147,17 @@ func (e *Editor) CurUp() {
 		return
 	}
 	e.cursor.up(e.lines[e.cursor.y-1].len())
+	// TEMP because up modifies cursor.x:
+	e.calcScrollX()
+}
+
+func (e *Editor) setCurCol(x int) {
+	e.cursor.setCol(x)
+	e.calcScrollX()
 }
 
 func (e *Editor) ShowCursor() {
-	e.cursor.show(e.x, e.y, e.screen)
+	e.cursor.show(e.x-e.scrollX, e.y, e.screen)
 }
 
 // // Editor: line methods
@@ -167,7 +179,7 @@ func (e *Editor) NewLine() {
 	newLn.buf = append(newLn.buf, curLine.buf[e.cursor.x:]...)
 	curLine.buf = curLine.buf[:e.cursor.x]
 	// reposition cursor to start of new line
-	e.cursor.setCol(0)
+	e.setCurCol(0)
 	e.cursor.y++
 }
 
@@ -184,7 +196,7 @@ func (e *Editor) Backspace() {
 		}
 		buf := e.removeLine()
 		e.cursor.y--
-		e.cursor.setCol(e.currentLine().len())
+		e.setCurCol(e.currentLine().len())
 		if len(buf) > 0 {
 			e.currentLine().append(buf)
 		}
@@ -196,7 +208,7 @@ func (e *Editor) Backspace() {
 
 func (e *Editor) ShowText() {
 	for i := range e.lines {
-		e.lines[i].show(e.x, e.y+i, e.screen)
+		e.lines[i].show(e.x, e.y+i, e.scrollX, e.screen)
 	}
 }
 
@@ -226,6 +238,12 @@ func (e *Editor) removeLine() []rune {
 		e.lines = append(e.lines[:e.cursor.y], e.lines[e.cursor.y+1:]...)
 	}
 	return buf
+}
+
+// calcScrollX calculates horizontal scroll position.
+// It should be called only after cursor movement to right on a line.
+func (e *Editor) calcScrollX() {
+	e.scrollX = max(0, e.cursor.x-MaxCharsOnLine+1)
 }
 
 // line represents a single line of text.
@@ -264,12 +282,12 @@ func (ln *line) append(buf []rune) {
 	ln.buf = append(ln.buf, buf...)
 }
 
-func (ln *line) show(baseX, baseY int, screen tcell.Screen) {
-	for i := range ln.buf {
+func (ln *line) show(baseX, baseY int, scrollX int, screen tcell.Screen) {
+	for i, char := range ln.buf[min(ln.len(), scrollX):min(ln.len(), scrollX+MaxCharsOnLine)] {
 		screen.SetContent(
 			baseX+i,
 			baseY,
-			ln.buf[i],
+			char,
 			nil,
 			tcell.StyleDefault,
 		)
@@ -311,6 +329,6 @@ func (c *cursor) setCol(x int) {
 	c.goalCol = x
 }
 
-func (c *cursor) show(baseX, baseY int, screen tcell.Screen) {
-	screen.ShowCursor(c.x+baseX, c.y+baseY)
+func (c *cursor) show(xOffset, yOffset int, screen tcell.Screen) {
+	screen.ShowCursor(c.x+xOffset, c.y+yOffset)
 }
