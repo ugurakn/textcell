@@ -1,6 +1,10 @@
 package textcell
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"strings"
+
+	"github.com/gdamore/tcell/v2"
+)
 
 const (
 	MaxCharsOnLine = 32
@@ -19,6 +23,23 @@ func NewEditor(baseX, baseY int) *Editor {
 	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
 	return e
+}
+
+// Reset resets editor to initial state.
+func (e *Editor) Reset() {
+	e = NewEditor(e.x, e.y)
+}
+
+// String returns the text in all the lines separated by sep.
+func (e *Editor) String(sep rune) string {
+	var b strings.Builder
+	for i, ln := range e.lines {
+		b.WriteString(string(ln.buf))
+		if i < len(e.lines)-1 {
+			b.WriteRune(sep)
+		}
+	}
+	return b.String()
 }
 
 // TODO focus-unfocus editor
