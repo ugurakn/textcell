@@ -6,6 +6,14 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// TEMP config as global const
+const (
+	BaseX = 2
+	BaseY = 2
+
+	MaxCharsOnLine = 32
+)
+
 func main() {
 	screen, err := tcell.NewScreen()
 	if err != nil {
@@ -18,11 +26,10 @@ func main() {
 		panic(err)
 	}
 
-	firstLine := NewLine()
-	cursor := NewCursor(0, 0)
+	editor := NewEditor(BaseX, BaseY)
 
 	// first render
-	cursor.Show(screen)
+	editor.ShowCursor(screen)
 	screen.Show()
 
 	running := true
@@ -35,28 +42,25 @@ func main() {
 		case *tcell.EventKey:
 			switch ev.Key() {
 			case tcell.KeyRune:
-				firstLine.WriteChar(ev.Rune(), cursor.x)
-				cursor.Right(firstLine.length)
+				editor.WriteChar(ev.Rune())
 			case tcell.KeyRight:
-				cursor.Right(firstLine.length)
+				editor.CurRight()
 			case tcell.KeyLeft:
-				cursor.Left()
+				editor.CurLeft()
 			case tcell.KeyBackspace:
-				if ok := firstLine.Backspace(cursor.x); ok {
-					cursor.Left()
-				}
+				editor.Backspace()
 			case tcell.KeyEsc:
 				running = false
 			}
 		}
 
-		// render text
-		firstLine.Show(screen)
+		// render text and cursor
+		editor.ShowText(screen)
+		editor.ShowCursor(screen)
 
 		// DEBUG
 		// debug_showCursorCoords(cursor, screen)
 
-		cursor.Show(screen)
 		screen.Show()
 	}
 }
@@ -65,7 +69,7 @@ func debug_clearScreen(screen tcell.Screen) {
 	screen.Fill('.', tcell.StyleDefault)
 }
 
-func debug_showCursorCoords(c *Cursor, screen tcell.Screen) {
+func debug_showCursorCoords(c *cursor, screen tcell.Screen) {
 	screen.PutStr(0, 10, fmt.Sprintf(
 		"cursorCoords: (%d, %d)",
 		c.x,

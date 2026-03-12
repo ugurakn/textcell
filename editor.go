@@ -2,28 +2,64 @@ package main
 
 import "github.com/gdamore/tcell/v2"
 
-const (
-	maxCharsOnLine = 64
-)
-
-// Line represents a single line of text.
-type Line struct {
-	buf    []rune
-	length int
-	y      int
+type Editor struct {
+	cursor *cursor
+	ln     *line // TEMP should be a []Line eventually
 }
 
-func NewLine() *Line {
-	l := new(Line)
-	l.buf = make([]rune, maxCharsOnLine) // can hold 64 chars by default
-	l.length = 0
-	l.y = 0
-	return l
+func NewEditor(baseX, baseY int) *Editor {
+	e := new(Editor)
+	e.cursor = newCursor(baseX, baseY)
+	e.ln = newLine(baseX, baseY)
+	return e
 }
 
-// WriteChar adds char to line buffer at cursor position cx.
+// // Editor: cursor methods
+
+func (e *Editor) CurRight() {
+	e.cursor.right(e.ln.length)
+}
+func (e *Editor) CurLeft() {
+	e.cursor.left()
+}
+func (e *Editor) ShowCursor(screen tcell.Screen) {
+	e.cursor.show(screen)
+}
+
+// // Editor: line methods
+
+func (e *Editor) WriteChar(char rune) {
+	e.ln.writeChar(char, e.cursor.x)
+	e.CurRight()
+}
+func (e *Editor) Backspace() {
+	if ok := e.ln.backspace(e.cursor.x); ok {
+		e.CurLeft()
+	}
+}
+func (e *Editor) ShowText(screen tcell.Screen) {
+	e.ln.show(screen)
+}
+
+// line represents a single line of text.
+type line struct {
+	buf          []rune
+	length       int
+	baseX, baseY int
+}
+
+func newLine(x, y int) *line {
+	ln := new(line)
+	ln.buf = make([]rune, MaxCharsOnLine) // can hold 64 chars by default
+	ln.length = 0
+	ln.baseX = x
+	ln.baseY = y
+	return ln
+}
+
+// writeChar adds char to line buffer at cursor position cx.
 // cx is assumed to be a legal position.
-func (ln *Line) WriteChar(char rune, cx int) {
+func (ln *line) writeChar(char rune, cx int) {
 	// // TODO bounds checking (do not grow buf)
 
 	// if cx points at the end of buf, just append.
@@ -36,8 +72,8 @@ func (ln *Line) WriteChar(char rune, cx int) {
 	ln.length++
 }
 
-// Backspace deletes the char that is to the left of cursor position cx.
-func (ln *Line) Backspace(cx int) bool {
+// backspace deletes the char that is to the left of cursor position cx.
+func (ln *line) backspace(cx int) bool {
 	if ln.length == 0 || cx == 0 {
 		return false
 	}
@@ -47,11 +83,11 @@ func (ln *Line) Backspace(cx int) bool {
 	return true
 }
 
-func (ln *Line) Show(screen tcell.Screen) {
+func (ln *line) show(screen tcell.Screen) {
 	for i := range ln.length {
 		screen.SetContent(
-			i,
-			ln.y,
+			ln.baseX+i,
+			ln.baseY,
 			ln.buf[i],
 			nil,
 			tcell.StyleDefault,
@@ -59,16 +95,22 @@ func (ln *Line) Show(screen tcell.Screen) {
 	}
 }
 
-// // Cursor
-type Cursor struct {
-	x, y int
+// // cursor
+type cursor struct {
+	baseX, baseY int
+	x, y         int
 }
 
-func NewCursor(x, y int) *Cursor {
-	return &Cursor{x, y}
+func newCursor(x, y int) *cursor {
+	return &cursor{
+		baseX: x,
+		baseY: y,
+		x:     0,
+		y:     0,
+	}
 }
 
-func (c *Cursor) Right(lnLen int) {
+func (c *cursor) right(lnLen int) {
 	// cursor can't move into 'empty' area to the right of its line
 	if c.x == lnLen {
 		return
@@ -76,13 +118,13 @@ func (c *Cursor) Right(lnLen int) {
 	c.x++
 }
 
-func (c *Cursor) Left() {
+func (c *cursor) left() {
 	if c.x <= 0 {
 		return
 	}
 	c.x--
 }
 
-func (c *Cursor) Show(screen tcell.Screen) {
-	screen.ShowCursor(c.x, c.y)
+func (c *cursor) show(screen tcell.Screen) {
+	screen.ShowCursor(c.x+c.baseX, c.y+c.baseY)
 }
