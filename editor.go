@@ -21,6 +21,26 @@ func NewEditor(baseX, baseY int) *Editor {
 	return e
 }
 
+// TODO focus-unfocus editor
+func (e *Editor) ProcessEvent(ev *tcell.EventKey) {
+	switch ev.Key() {
+	case tcell.KeyRune:
+		e.WriteChar(ev.Rune())
+	case tcell.KeyRight:
+		e.CurRight()
+	case tcell.KeyLeft:
+		e.CurLeft()
+	case tcell.KeyDown:
+		e.CurDown()
+	case tcell.KeyUp:
+		e.CurUp()
+	case tcell.KeyBackspace:
+		e.Backspace()
+	case tcell.KeyEnter: // create new line under cursor y
+		e.NewLine()
+	}
+}
+
 // // Editor: cursor methods
 
 func (e *Editor) CurRight() {
