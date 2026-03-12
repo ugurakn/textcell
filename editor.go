@@ -11,23 +11,30 @@ const (
 )
 
 type Editor struct {
-	lines  []*line
-	cursor *cursor
-	x, y   int
+	lines    []*line
+	cursor   *cursor
+	x, y     int
+	hasFocus bool
+	screen   tcell.Screen
 }
 
-func NewEditor(baseX, baseY int) *Editor {
+// NewEditor creates and returns a new Editor without focus.
+func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
 	e := new(Editor)
 	e.cursor = newCursor()
 	e.lines = make([]*line, 0, 32)
 	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
+	e.hasFocus = false
+	e.screen = screen
 	return e
 }
 
+// // Editor: Public API
+
 // Reset resets editor to initial state.
 func (e *Editor) Reset() {
-	e = NewEditor(e.x, e.y)
+	e = NewEditor(e.x, e.y, e.screen)
 }
 
 // String returns the text in all the lines separated by sep.
@@ -42,24 +49,55 @@ func (e *Editor) String(sep rune) string {
 	return b.String()
 }
 
-// TODO focus-unfocus editor
-func (e *Editor) ProcessEvent(ev *tcell.EventKey) {
-	switch ev.Key() {
-	case tcell.KeyRune:
-		e.WriteChar(ev.Rune())
-	case tcell.KeyRight:
-		e.CurRight()
-	case tcell.KeyLeft:
-		e.CurLeft()
-	case tcell.KeyDown:
-		e.CurDown()
-	case tcell.KeyUp:
-		e.CurUp()
-	case tcell.KeyBackspace:
-		e.Backspace()
-	case tcell.KeyEnter: // create new line under cursor y
-		e.NewLine()
+// Show puts text and cursor on screen.
+// Cursor will be showed only if editor has focus.
+func (e *Editor) Show() {
+	e.ShowText()
+	if e.hasFocus {
+		e.ShowCursor()
 	}
+}
+
+// ProcessEvent handles keypress events.
+// Do not call this method if e is unfocused.
+func (e *Editor) ProcessEvent(ev tcell.Event) {
+	switch ev := ev.(type) {
+	case *tcell.EventKey:
+		switch ev.Key() {
+		case tcell.KeyRune:
+			e.WriteChar(ev.Rune())
+		case tcell.KeyRight:
+			e.CurRight()
+		case tcell.KeyLeft:
+			e.CurLeft()
+		case tcell.KeyDown:
+			e.CurDown()
+		case tcell.KeyUp:
+			e.CurUp()
+		case tcell.KeyBackspace:
+			e.Backspace()
+		case tcell.KeyEnter:
+			e.NewLine()
+		case tcell.KeyESC:
+			e.Unfocus()
+		}
+	}
+}
+
+// Focus focuses e and shows cursor.
+func (e *Editor) Focus() {
+	e.hasFocus = true
+}
+
+// Unfocus unfocuses e and hides cursor.
+// Pressing ESC will call Unfocus.
+func (e *Editor) Unfocus() {
+	e.hasFocus = false
+	e.screen.HideCursor()
+}
+
+func (e *Editor) HasFocus() bool {
+	return e.hasFocus
 }
 
 // // Editor: cursor methods
@@ -106,8 +144,8 @@ func (e *Editor) CurUp() {
 	e.cursor.up(e.lines[e.cursor.y-1].len())
 }
 
-func (e *Editor) ShowCursor(screen tcell.Screen) {
-	e.cursor.show(e.x, e.y, screen)
+func (e *Editor) ShowCursor() {
+	e.cursor.show(e.x, e.y, e.screen)
 }
 
 // // Editor: line methods
@@ -156,9 +194,9 @@ func (e *Editor) Backspace() {
 	e.CurLeft()
 }
 
-func (e *Editor) ShowText(screen tcell.Screen) {
+func (e *Editor) ShowText() {
 	for i := range e.lines {
-		e.lines[i].show(e.x, e.y+i, screen)
+		e.lines[i].show(e.x, e.y+i, e.screen)
 	}
 }
 
