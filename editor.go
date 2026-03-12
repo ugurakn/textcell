@@ -7,21 +7,24 @@ const (
 )
 
 type Editor struct {
+	lines  []*line
 	cursor *cursor
-	ln     *line // TEMP should be a []Line eventually
+	x, y   int
 }
 
 func NewEditor(baseX, baseY int) *Editor {
 	e := new(Editor)
 	e.cursor = newCursor(baseX, baseY)
-	e.ln = newLine(baseX, baseY)
+	e.lines = make([]*line, 0, 32)
+	e.lines = append(e.lines, newLine(baseX, baseY))
+	e.x, e.y = baseX, baseY
 	return e
 }
 
 // // Editor: cursor methods
 
 func (e *Editor) CurRight() {
-	e.cursor.right(e.ln.length)
+	e.cursor.right(e.currentLine().length)
 }
 func (e *Editor) CurLeft() {
 	e.cursor.left()
@@ -32,17 +35,34 @@ func (e *Editor) ShowCursor(screen tcell.Screen) {
 
 // // Editor: line methods
 
+// TODO
+// NewLine creates a new line under cursor y
+// and moves cursor to new line.
+func (e *Editor) NewLine() {
+	panic("(*Editor).NewLine not implemented yet")
+}
+
 func (e *Editor) WriteChar(char rune) {
-	e.ln.writeChar(char, e.cursor.x)
+	e.currentLine().writeChar(char, e.cursor.x)
 	e.CurRight()
 }
 func (e *Editor) Backspace() {
-	if ok := e.ln.backspace(e.cursor.x); ok {
+	if ok := e.currentLine().backspace(e.cursor.x); ok {
 		e.CurLeft()
 	}
 }
 func (e *Editor) ShowText(screen tcell.Screen) {
-	e.ln.show(screen)
+	for i := range e.lines {
+		e.lines[i].show(screen)
+	}
+}
+
+// // Editor: helper methods
+
+// currentLine returns the line on which
+// the cursor is currently placed.
+func (e *Editor) currentLine() *line {
+	return e.lines[e.cursor.y]
 }
 
 // line represents a single line of text.
@@ -54,7 +74,7 @@ type line struct {
 
 func newLine(x, y int) *line {
 	ln := new(line)
-	ln.buf = make([]rune, MaxCharsOnLine) // can hold 64 chars by default
+	ln.buf = make([]rune, MaxCharsOnLine)
 	ln.length = 0
 	ln.baseX = x
 	ln.baseY = y
