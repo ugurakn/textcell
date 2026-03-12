@@ -14,9 +14,9 @@ type Editor struct {
 
 func NewEditor(baseX, baseY int) *Editor {
 	e := new(Editor)
-	e.cursor = newCursor(baseX, baseY)
+	e.cursor = newCursor()
 	e.lines = make([]*line, 0, 32)
-	e.lines = append(e.lines, newLine(baseX, baseY))
+	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
 	return e
 }
@@ -88,7 +88,7 @@ func (e *Editor) CurUp() {
 }
 
 func (e *Editor) ShowCursor(screen tcell.Screen) {
-	e.cursor.show(screen)
+	e.cursor.show(e.x, e.y, screen)
 }
 
 // // Editor: line methods
@@ -96,7 +96,7 @@ func (e *Editor) ShowCursor(screen tcell.Screen) {
 // NewLine creates a new line under cursor y
 // and moves cursor to new line.
 func (e *Editor) NewLine() {
-	newLn := newLine(e.x, e.y+e.cursor.y+1)
+	newLn := newLine()
 	if len(e.lines)-1 == e.cursor.y {
 		e.lines = append(e.lines, newLn)
 	} else {
@@ -104,17 +104,11 @@ func (e *Editor) NewLine() {
 			e.lines[:e.cursor.y+1],
 			append([]*line{newLn}, e.lines[e.cursor.y+1:]...)...,
 		)
-		// update y for lines after new line
-		for _, ln := range e.lines[e.cursor.y+2:] {
-			ln.baseY++
-		}
 	}
-
 	// carry text to right of cursor to the new line
 	curLine := e.currentLine()
 	newLn.buf = append(newLn.buf, curLine.buf[e.cursor.x:]...)
 	curLine.buf = curLine.buf[:e.cursor.x]
-
 	// reposition cursor to start of new line
 	e.cursor.x = 0
 	e.cursor.y++
@@ -131,7 +125,7 @@ func (e *Editor) Backspace() {
 }
 func (e *Editor) ShowText(screen tcell.Screen) {
 	for i := range e.lines {
-		e.lines[i].show(screen)
+		e.lines[i].show(e.x, e.y+i, screen)
 	}
 }
 
@@ -151,19 +145,14 @@ func (e *Editor) prevLine() *line {
 	return e.lines[e.cursor.y-1]
 }
 
-// func (e *Editor) nextLine() *line {}
-
 // line represents a single line of text.
 type line struct {
-	buf          []rune
-	baseX, baseY int
+	buf []rune
 }
 
-func newLine(baseX, baseY int) *line {
+func newLine() *line {
 	ln := new(line)
 	ln.buf = make([]rune, 0, MaxCharsOnLine)
-	ln.baseX = baseX
-	ln.baseY = baseY
 	return ln
 }
 
@@ -191,11 +180,11 @@ func (ln *line) backspace(cx int) bool {
 	return true
 }
 
-func (ln *line) show(screen tcell.Screen) {
+func (ln *line) show(baseX, baseY int, screen tcell.Screen) {
 	for i := range ln.buf {
 		screen.SetContent(
-			ln.baseX+i,
-			ln.baseY,
+			baseX+i,
+			baseY,
 			ln.buf[i],
 			nil,
 			tcell.StyleDefault,
@@ -210,15 +199,12 @@ func (ln *line) len() int {
 
 // // cursor
 type cursor struct {
-	baseX, baseY int
-	x, y         int
-	goalCol      int
+	x, y    int
+	goalCol int
 }
 
-func newCursor(x, y int) *cursor {
+func newCursor() *cursor {
 	return &cursor{
-		baseX:   x,
-		baseY:   y,
 		x:       0,
 		y:       0,
 		goalCol: 0,
@@ -235,6 +221,6 @@ func (c *cursor) up(lnLen int) {
 	c.x = min(c.goalCol, lnLen)
 }
 
-func (c *cursor) show(screen tcell.Screen) {
-	screen.ShowCursor(c.x+c.baseX, c.y+c.baseY)
+func (c *cursor) show(baseX, baseY int, screen tcell.Screen) {
+	screen.ShowCursor(c.x+baseX, c.y+baseY)
 }
