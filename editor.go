@@ -114,15 +114,30 @@ func (e *Editor) NewLine() {
 	e.cursor.y++
 }
 
+// WriteChar appends char to current line and moves cursor right.
 func (e *Editor) WriteChar(char rune) {
 	e.currentLine().writeChar(char, e.cursor.x)
 	e.CurRight()
 }
+
 func (e *Editor) Backspace() {
-	if ok := e.currentLine().backspace(e.cursor.x); ok {
-		e.CurLeft()
+	if e.cursor.x == 0 {
+		if e.cursor.y == 0 {
+			return
+		}
+		buf := e.removeLine()
+		e.cursor.y--
+		e.cursor.x = e.currentLine().len()
+		e.cursor.goalCol = e.cursor.x
+		if len(buf) > 0 {
+			e.currentLine().append(buf)
+		}
+		return
 	}
+	e.currentLine().backspace(e.cursor.x)
+	e.CurLeft()
 }
+
 func (e *Editor) ShowText(screen tcell.Screen) {
 	for i := range e.lines {
 		e.lines[i].show(e.x, e.y+i, screen)
@@ -136,13 +151,25 @@ func (e *Editor) currentLine() *line {
 	return e.lines[e.cursor.y]
 }
 
-// prevLine returns the line that is above the current line
+// prevLine returns the line above the current line
 // or nil if cursor is already on the top line.
 func (e *Editor) prevLine() *line {
 	if e.cursor.y == 0 {
 		return nil
 	}
 	return e.lines[e.cursor.y-1]
+}
+
+// removeLine removes the current line and returns its buf.
+func (e *Editor) removeLine() []rune {
+	buf := e.currentLine().buf
+	// if current line is the last line, reslice.
+	if e.cursor.y == len(e.lines)-1 {
+		e.lines = e.lines[:len(e.lines)-1]
+	} else {
+		e.lines = append(e.lines[:e.cursor.y], e.lines[e.cursor.y+1:]...)
+	}
+	return buf
 }
 
 // line represents a single line of text.
@@ -171,13 +198,14 @@ func (ln *line) writeChar(char rune, cx int) {
 }
 
 // backspace deletes the char that is to the left of cursor position cx.
-func (ln *line) backspace(cx int) bool {
-	if ln.len() == 0 || cx == 0 {
-		return false
-	}
-
+// caller must guarantee cx > 0.
+func (ln *line) backspace(cx int) {
 	ln.buf = append(ln.buf[:cx-1], ln.buf[cx:]...)
-	return true
+}
+
+// append appends the contents of buf to its own buffer.
+func (ln *line) append(buf []rune) {
+	ln.buf = append(ln.buf, buf...)
 }
 
 func (ln *line) show(baseX, baseY int, screen tcell.Screen) {
