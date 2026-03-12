@@ -50,12 +50,11 @@ func (e *Editor) CurRight() {
 		if c.y == len(e.lines)-1 {
 			return
 		}
-		c.x = 0
+		e.cursor.setCol(0)
 		c.y++
-	} else {
-		c.x++
+		return
 	}
-	c.goalCol = c.x
+	e.cursor.setCol(c.x + 1)
 }
 
 func (e *Editor) CurLeft() {
@@ -65,12 +64,11 @@ func (e *Editor) CurLeft() {
 		if c.y == 0 {
 			return
 		}
-		c.x = e.prevLine().len()
+		e.cursor.setCol(e.prevLine().len())
 		c.y--
-	} else {
-		c.x--
+		return
 	}
-	c.goalCol = c.x
+	e.cursor.setCol(c.x - 1)
 }
 
 func (e *Editor) CurDown() {
@@ -110,7 +108,7 @@ func (e *Editor) NewLine() {
 	newLn.buf = append(newLn.buf, curLine.buf[e.cursor.x:]...)
 	curLine.buf = curLine.buf[:e.cursor.x]
 	// reposition cursor to start of new line
-	e.cursor.x = 0
+	e.cursor.setCol(0)
 	e.cursor.y++
 }
 
@@ -127,8 +125,7 @@ func (e *Editor) Backspace() {
 		}
 		buf := e.removeLine()
 		e.cursor.y--
-		e.cursor.x = e.currentLine().len()
-		e.cursor.goalCol = e.cursor.x
+		e.cursor.setCol(e.currentLine().len())
 		if len(buf) > 0 {
 			e.currentLine().append(buf)
 		}
@@ -247,6 +244,12 @@ func (c *cursor) down(lnLen int) {
 func (c *cursor) up(lnLen int) {
 	c.y--
 	c.x = min(c.goalCol, lnLen)
+}
+
+// setCol sets cursor col and goalCol to x.
+func (c *cursor) setCol(x int) {
+	c.x = x
+	c.goalCol = x
 }
 
 func (c *cursor) show(baseX, baseY int, screen tcell.Screen) {
