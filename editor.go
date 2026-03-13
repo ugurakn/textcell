@@ -11,24 +11,35 @@ const (
 )
 
 type Editor struct {
-	lines    []*line
-	screen   tcell.Screen
-	cursor   *cursor
-	x, y     int
-	scrollX  int
-	hasFocus bool
+	// TODO should be provided by client
+	styleDefault tcell.Style
+	// styleHighlight is used for highlighting selected text.
+	// its fg and bg colors are reversed from styleDefault.
+	styleHighlight tcell.Style
+	lines          []*line
+	screen         tcell.Screen
+	cursor         *cursor
+	selected       *selectedText
+	x, y           int
+	scrollX        int
+	hasFocus       bool
+	hasSelected    bool
 }
 
 // NewEditor creates and returns a new Editor without focus.
 func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
 	e := new(Editor)
+	e.screen = screen
 	e.cursor = newCursor()
 	e.lines = make([]*line, 0, 32)
 	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
+	e.styleDefault = tcell.StyleDefault
+	e.styleHighlight = e.styleDefault.Reverse(true)
 	e.scrollX = 0
 	e.hasFocus = false
-	e.screen = screen
+	e.hasSelected = false
+	e.selected = nil
 	return e
 }
 
@@ -51,6 +62,31 @@ func (e *Editor) String(sep rune) string {
 	return b.String()
 }
 
+func (e *Editor) ShowText() {
+	for i := range e.lines {
+		e.lines[i].show(e.x, e.y+i, e.scrollX, e.styleDefault, e.screen)
+	}
+	if e.hasSelected {
+		e.highlightSelected()
+	}
+}
+
+// highlight the selected portion of on-screen text.
+func (e *Editor) highlightSelected() {
+	// TEMP assume scrollX == 0
+	for _, sla := range e.selected.lines {
+		for i, char := range e.lines[sla.y].buf[sla.start:sla.end] {
+			e.screen.SetContent(
+				e.x+i+sla.start,
+				e.y+sla.y,
+				char,
+				nil,
+				e.styleHighlight,
+			)
+		}
+	}
+}
+
 // Show puts text and cursor on screen.
 // Cursor will be showed only if editor has focus.
 func (e *Editor) Show() {
@@ -65,6 +101,16 @@ func (e *Editor) Show() {
 func (e *Editor) ProcessEvent(ev tcell.Event) {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
+		if ev.Modifiers()&tcell.ModShift != 0 {
+			if !e.hasSelected {
+				e.startSelected()
+			}
+			// defer until after cursor movement
+			defer e.setSelected()
+		} else {
+			e.clearSelected()
+		}
+
 		switch ev.Key() {
 		case tcell.KeyRune:
 			e.WriteChar(ev.Rune())
@@ -206,10 +252,66 @@ func (e *Editor) Backspace() {
 	e.CurLeft()
 }
 
-func (e *Editor) ShowText() {
-	for i := range e.lines {
-		e.lines[i].show(e.x, e.y+i, e.scrollX, e.screen)
+// // Editor: selectedText methods
+
+func (e *Editor) startSelected() {
+	e.hasSelected = true
+	e.selected = newSelectedText(e.cursor.x, e.cursor.y)
+}
+
+func (e *Editor) clearSelected() {
+	e.hasSelected = false
+	e.selected = nil
+}
+
+// setSelected sets currently selected areas on every line.
+// e.selected is assumed to have been already initialized with pivot point.
+func (e *Editor) setSelected() {
+	cx, cy := e.cursor.x, e.cursor.y
+	px, py := e.selected.pivotX, e.selected.pivotY
+	sel := e.selected
+
+	// reset selected
+	sel.lines = sel.lines[:0]
+
+	var lnCount int
+	sel.dir, lnCount = sel.calcDirLnCount(cx, cy)
+
+	var start, end, firstLnY int
+	switch sel.dir {
+	case 0: // cursor on pivot point, nothing selected
+		return
+	case 'R':
+		start = px
+		end = cx
+		firstLnY = py
+	case 'L':
+		start = cx
+		end = px
+		firstLnY = cy
 	}
+
+	// first line
+	sla := &selectedLnArea{start: start, end: e.lines[firstLnY].len(), y: firstLnY}
+	sel.lines = append(sel.lines, sla)
+	if lnCount == 1 {
+		sla.end = end
+		return
+	}
+	// last line
+	slaLast := &selectedLnArea{start: 0, end: end, y: firstLnY + lnCount - 1}
+	if lnCount == 2 {
+		sel.lines = append(sel.lines, slaLast)
+		return
+	}
+	//  middle line(s)
+	for i := range lnCount - 2 {
+		lnY := firstLnY + i + 1
+		sla = &selectedLnArea{start: 0, end: e.lines[lnY].len(), y: lnY}
+		sel.lines = append(sel.lines, sla)
+	}
+
+	sel.lines = append(sel.lines, slaLast)
 }
 
 // // Editor: helper methods
@@ -241,7 +343,7 @@ func (e *Editor) removeLine() []rune {
 }
 
 // calcScrollX calculates horizontal scroll position.
-// It should be called only after cursor movement to right on a line.
+// It should be called after every cursor col change.
 func (e *Editor) calcScrollX() {
 	e.scrollX = max(0, e.cursor.x-MaxCharsOnLine+1)
 }
@@ -260,8 +362,6 @@ func newLine() *line {
 // writeChar adds char to line buffer at cursor position cx.
 // cx is assumed to be a legal position.
 func (ln *line) writeChar(char rune, cx int) {
-	// // TODO bounds checking (do not grow buf)
-
 	// if cx points at the end of buf, just append.
 	// otherwise, insert.
 	if cx == ln.len() {
@@ -282,14 +382,14 @@ func (ln *line) append(buf []rune) {
 	ln.buf = append(ln.buf, buf...)
 }
 
-func (ln *line) show(baseX, baseY int, scrollX int, screen tcell.Screen) {
+func (ln *line) show(baseX, baseY int, scrollX int, style tcell.Style, screen tcell.Screen) {
 	for i, char := range ln.buf[min(ln.len(), scrollX):min(ln.len(), scrollX+MaxCharsOnLine)] {
 		screen.SetContent(
 			baseX+i,
 			baseY,
 			char,
 			nil,
-			tcell.StyleDefault,
+			style,
 		)
 	}
 }
