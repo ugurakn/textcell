@@ -25,7 +25,8 @@ func (d *Debug) ShowInfo() {
 	var b strings.Builder
 	fmt.Fprintf(&b, "scrollX:%d | ", d.e.scrollX)
 	fmt.Fprintf(&b, "logCurPos:(%d,%d) | ", d.e.cursor.x, d.e.cursor.y)
-	fmt.Fprintf(&b, "curLineLen:%d | ", d.e.currentLine().len())
+	fmt.Fprintf(&b, "curLnLen:%d | ", d.e.currentLine().len())
+	// fmt.Fprintf(&b, "curLnFL:(%d,%d) | ", d.e.currentLine().fVisible, d.e.currentLine().lVisible)
 	// fmt.Fprintf(&b, "curLineText:%s | ", string(d.e.currentLine().buf))
 	d.screen.PutStr(
 		d.x,

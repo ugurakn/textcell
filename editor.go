@@ -23,7 +23,6 @@ type Editor struct {
 	x, y           int
 	scrollX        int
 	hasFocus       bool
-	hasSelected    bool
 }
 
 // NewEditor creates and returns a new Editor without focus.
@@ -38,7 +37,6 @@ func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
 	e.styleHighlight = e.styleDefault.Reverse(true)
 	e.scrollX = 0
 	e.hasFocus = false
-	e.hasSelected = false
 	e.selected = nil
 	return e
 }
@@ -66,23 +64,33 @@ func (e *Editor) ShowText() {
 	for i := range e.lines {
 		e.lines[i].show(e.x, e.y+i, e.scrollX, e.styleDefault, e.screen)
 	}
-	if e.hasSelected {
+	if e.selected != nil {
 		e.highlightSelected()
 	}
 }
 
 // highlight the selected portion of on-screen text.
 func (e *Editor) highlightSelected() {
-	// TEMP assume scrollX == 0
+	var ln *line
+	var offset int
 	for _, sla := range e.selected.lines {
-		for i, char := range e.lines[sla.y].buf[sla.start:sla.end] {
+		ln = e.lines[sla.y]
+		offset = max(0, sla.start-ln.fVisible)
+		for i := sla.start; i < sla.end; i++ {
+			if i < ln.fVisible {
+				continue
+			}
+			if i >= ln.lVisible {
+				break
+			}
 			e.screen.SetContent(
-				e.x+i+sla.start,
+				e.x+offset,
 				e.y+sla.y,
-				char,
+				ln.buf[i],
 				nil,
 				e.styleHighlight,
 			)
+			offset++
 		}
 	}
 }
@@ -102,13 +110,15 @@ func (e *Editor) ProcessEvent(ev tcell.Event) {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
 		if ev.Modifiers()&tcell.ModShift != 0 {
-			if !e.hasSelected {
+			if e.selected == nil {
 				e.startSelected()
 			}
 			// defer until after cursor movement
 			defer e.setSelected()
 		} else {
-			e.clearSelected()
+			if e.selected != nil {
+				e.clearSelected()
+			}
 		}
 
 		switch ev.Key() {
@@ -255,12 +265,10 @@ func (e *Editor) Backspace() {
 // // Editor: selectedText methods
 
 func (e *Editor) startSelected() {
-	e.hasSelected = true
 	e.selected = newSelectedText(e.cursor.x, e.cursor.y)
 }
 
 func (e *Editor) clearSelected() {
-	e.hasSelected = false
 	e.selected = nil
 }
 
@@ -351,6 +359,10 @@ func (e *Editor) calcScrollX() {
 // line represents a single line of text.
 type line struct {
 	buf []rune
+	// fVisible is the idx for first visible char in buf.
+	// lVisible is the idx for last visible char in buf+1.
+	// set by [line].show.
+	fVisible, lVisible int
 }
 
 func newLine() *line {
@@ -383,7 +395,9 @@ func (ln *line) append(buf []rune) {
 }
 
 func (ln *line) show(baseX, baseY int, scrollX int, style tcell.Style, screen tcell.Screen) {
-	for i, char := range ln.buf[min(ln.len(), scrollX):min(ln.len(), scrollX+MaxCharsOnLine)] {
+	ln.fVisible = min(ln.len(), scrollX)
+	ln.lVisible = min(ln.len(), scrollX+MaxCharsOnLine)
+	for i, char := range ln.buf[ln.fVisible:ln.lVisible] {
 		screen.SetContent(
 			baseX+i,
 			baseY,
