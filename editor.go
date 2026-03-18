@@ -11,7 +11,6 @@ const (
 )
 
 type Editor struct {
-	// TODO should be provided by client
 	styleDefault tcell.Style
 	// styleHighlight is used for highlighting selected text.
 	// its fg and bg colors are reversed from styleDefault.
@@ -26,7 +25,7 @@ type Editor struct {
 }
 
 // NewEditor creates and returns a new Editor without focus.
-func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
+func NewEditor(baseX, baseY int, screen tcell.Screen, opts ...Option) *Editor {
 	e := new(Editor)
 	e.screen = screen
 	e.cursor = newCursor()
@@ -38,6 +37,10 @@ func NewEditor(baseX, baseY int, screen tcell.Screen) *Editor {
 	e.scrollX = 0
 	e.hasFocus = false
 	e.selected = nil
+	// apply options
+	for _, opt := range opts {
+		opt(e)
+	}
 	return e
 }
 
