@@ -15,6 +15,7 @@ type Editor struct {
 	// styleHighlight is used for highlighting selected text.
 	// its fg and bg colors are reversed from styleDefault.
 	styleHighlight tcell.Style
+	opts           []Option
 	lines          []*line
 	screen         tcell.Screen
 	cursor         *cursor
@@ -28,27 +29,24 @@ type Editor struct {
 func NewEditor(baseX, baseY int, screen tcell.Screen, opts ...Option) *Editor {
 	e := new(Editor)
 	e.screen = screen
-	e.cursor = newCursor()
-	e.lines = make([]*line, 0, 32)
-	e.lines = append(e.lines, newLine())
 	e.x, e.y = baseX, baseY
+	e.setInitState()
+
+	e.hasFocus = false
 	e.styleDefault = tcell.StyleDefault
 	e.styleHighlight = e.styleDefault.Reverse(true)
-	e.scrollX = 0
-	e.hasFocus = false
-	e.selected = nil
-	// apply options
-	for _, opt := range opts {
-		opt(e)
-	}
+	e.opts = opts
+	e.applyOpts()
 	return e
 }
 
 // // Editor: Public API
 
-// Reset resets editor to initial state.
+// Reset resets e to its initial state, including original options.
+// To re-initialize with different options, use NewEditor.
 func (e *Editor) Reset() {
-	e = NewEditor(e.x, e.y, e.screen)
+	e.setInitState()
+	e.applyOpts()
 }
 
 // String returns the text in all the lines separated by sep.
@@ -326,6 +324,20 @@ func (e *Editor) setSelected() {
 }
 
 // // Editor: helper methods
+
+func (e *Editor) setInitState() {
+	e.cursor = newCursor()
+	e.lines = make([]*line, 0, 32)
+	e.lines = append(e.lines, newLine())
+	e.scrollX = 0
+	e.selected = nil
+}
+
+func (e *Editor) applyOpts() {
+	for _, opt := range e.opts {
+		opt(e)
+	}
+}
 
 // currentLine returns the line the cursor is on.
 func (e *Editor) currentLine() *line {
