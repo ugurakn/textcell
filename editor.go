@@ -2,6 +2,7 @@ package textcell
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -9,6 +10,12 @@ import (
 const (
 	MaxCharsOnLine = 32
 )
+
+// charPos represents a character at a given x(=col) and y(=line) position.
+type charPos struct {
+	ln, col int
+	char    rune
+}
 
 type Editor struct {
 	styleDefault tcell.Style
@@ -108,8 +115,11 @@ func (e *Editor) Show() {
 // ProcessEvent handles keypress events.
 // Do not call this method if e is unfocused.
 func (e *Editor) ProcessEvent(ev tcell.Event) {
+	modCtrl := false
+
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
+		// modShift
 		if ev.Modifiers()&tcell.ModShift != 0 {
 			if e.selected == nil {
 				e.startSelected()
@@ -121,13 +131,25 @@ func (e *Editor) ProcessEvent(ev tcell.Event) {
 				e.clearSelected()
 			}
 		}
+		// modCtrl
+		if ev.Modifiers()&tcell.ModCtrl != 0 {
+			modCtrl = true
+		}
 
 		switch ev.Key() {
 		case tcell.KeyRune:
 			e.WriteChar(ev.Rune())
 		case tcell.KeyRight:
+			if modCtrl {
+				e.CurRightWord()
+				break
+			}
 			e.CurRight()
 		case tcell.KeyLeft:
+			if modCtrl {
+				e.CurLeftWord()
+				break
+			}
 			e.CurLeft()
 		case tcell.KeyDown:
 			e.CurDown()
@@ -172,7 +194,6 @@ func (e *Editor) CurRight() {
 		c.y++
 		return
 	}
-	// incr scrollX if cursor moved beyond MaxCharOnLine limit
 	e.setCurCol(c.x + 1)
 }
 
@@ -188,6 +209,61 @@ func (e *Editor) CurLeft() {
 		return
 	}
 	e.setCurCol(c.x - 1)
+}
+
+// CurRightWord moves cursor to right by a whole word.
+// A word is defined as any contiguous sequence of letters and digits.
+func (e *Editor) CurRightWord() {
+	cp := e.MoveCurByWord(e.nextCharPos)
+	e.setCurCol(cp.col)
+	e.cursor.y = (cp.ln)
+}
+
+// CurLeftWord moves cursor to left by a whole word.
+// A word is defined as any contiguous sequence of letters and digits.
+func (e *Editor) CurLeftWord() {
+	cp := e.MoveCurByWord(e.prevCharPos)
+	// move onto first char of word if possible
+	if cp.char != 0 {
+		e.nextCharPos(cp)
+	}
+	e.setCurCol(cp.col)
+	e.cursor.y = cp.ln
+}
+
+// MoveCurByWord returns charPos for cursor movement by a whole word.
+//
+// (right: word_ left: _word if possible to move beyond word)
+func (e *Editor) MoveCurByWord(getCharPos func(cp *charPos)) *charPos {
+	cp := &charPos{ln: e.cursor.y, col: e.cursor.x}
+	processChar := func() bool {
+		getCharPos(cp)
+		if cp.char == 0 {
+			return true
+		}
+		return false
+	}
+
+	// find next word if not on one
+	for {
+		if done := processChar(); done {
+			return cp
+		}
+		if isAlpha(cp.char) {
+			break
+		}
+	}
+
+	// move past word
+	for {
+		if done := processChar(); done {
+			return cp
+		}
+		if !isAlpha(cp.char) {
+			break
+		}
+	}
+	return cp
 }
 
 func (e *Editor) CurDown() {
@@ -371,6 +447,51 @@ func (e *Editor) calcScrollX() {
 	e.scrollX = max(0, e.cursor.x-MaxCharsOnLine+1)
 }
 
+// nextCharPos modifies cp to represent the char after cp.
+// if no next char exists, it will always return
+// char=0 with ln and col unchanged.
+func (e *Editor) nextCharPos(cp *charPos) {
+	cp.col += 1
+	if cp.col > e.lines[cp.ln].len() {
+		if cp.ln == len(e.lines)-1 { // end of text
+			cp.col--
+			cp.char = 0
+			return
+		}
+		// go to next line
+		cp.ln++
+		cp.col = 0
+	}
+
+	if cp.col == e.lines[cp.ln].len() {
+		// cursor at end-of-line represented as whitespace
+		cp.char = ' '
+		return
+	}
+
+	cp.char = e.lines[cp.ln].buf[cp.col]
+}
+
+// prevCharPos modifies cp to represent the char before cp.
+// if no prev char exists, it will always return
+// char=0 with ln and col unchanged.
+func (e *Editor) prevCharPos(cp *charPos) {
+	if cp.col-1 < 0 {
+		if cp.ln == 0 { // left boundary
+			cp.char = 0
+			return
+		}
+		// go to above line
+		cp.ln--
+		cp.col = e.lines[cp.ln].len()
+		cp.char = ' '
+		return
+	}
+
+	cp.col--
+	cp.char = e.lines[cp.ln].buf[cp.col]
+}
+
 // line represents a single line of text.
 type line struct {
 	buf []rune
@@ -460,4 +581,10 @@ func (c *cursor) setCol(x int) {
 
 func (c *cursor) show(xOffset, yOffset int, screen tcell.Screen) {
 	screen.ShowCursor(c.x+xOffset, c.y+yOffset)
+}
+
+// // Utils
+
+func isAlpha(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
