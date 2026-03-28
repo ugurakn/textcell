@@ -116,20 +116,18 @@ func (e *Editor) Show() {
 // Do not call this method if e is unfocused.
 func (e *Editor) ProcessEvent(ev tcell.Event) {
 	modCtrl := false
+	modShift := false
 
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
 		// modShift
 		if ev.Modifiers()&tcell.ModShift != 0 {
+			modShift = true
 			if e.selected == nil {
 				e.startSelected()
 			}
 			// defer until after cursor movement
 			defer e.setSelected()
-		} else {
-			if e.selected != nil {
-				e.clearSelected()
-			}
 		}
 		// modCtrl
 		if ev.Modifiers()&tcell.ModCtrl != 0 {
@@ -140,22 +138,38 @@ func (e *Editor) ProcessEvent(ev tcell.Event) {
 		case tcell.KeyRune:
 			e.WriteChar(ev.Rune())
 		case tcell.KeyRight:
+			if e.selected != nil && !modShift {
+				e.clearSelected()
+			}
 			if modCtrl {
 				e.CurRightWord()
 				break
 			}
 			e.CurRight()
 		case tcell.KeyLeft:
+			if e.selected != nil && !modShift {
+				e.clearSelected()
+			}
 			if modCtrl {
 				e.CurLeftWord()
 				break
 			}
 			e.CurLeft()
 		case tcell.KeyDown:
+			if e.selected != nil && !modShift {
+				e.clearSelected()
+			}
 			e.CurDown()
 		case tcell.KeyUp:
+			if e.selected != nil && !modShift {
+				e.clearSelected()
+			}
 			e.CurUp()
 		case tcell.KeyBackspace:
+			if e.selected != nil {
+				e.backspaceSelected()
+				break
+			}
 			e.Backspace()
 		case tcell.KeyEnter:
 			e.NewLine()
@@ -324,19 +338,24 @@ func (e *Editor) WriteChar(char rune) {
 
 func (e *Editor) Backspace() {
 	if e.cursor.x == 0 {
-		if e.cursor.y == 0 {
-			return
-		}
-		buf := e.removeLine()
-		e.cursor.y--
-		e.setCurCol(e.currentLine().len())
-		if len(buf) > 0 {
-			e.currentLine().append(buf)
-		}
+		e.backspaceToPrevLn()
 		return
 	}
-	e.currentLine().backspace(e.cursor.x)
+	e.currentLine().backspace(e.cursor.x-1, e.cursor.x)
 	e.CurLeft()
+}
+
+// backspaceToPrevLn assumes cursor col is 0.
+func (e *Editor) backspaceToPrevLn() {
+	if e.cursor.y == 0 {
+		return
+	}
+	buf := e.removeLine(e.cursor.y)
+	e.cursor.y--
+	e.setCurCol(e.currentLine().len())
+	if len(buf) > 0 {
+		e.currentLine().append(buf)
+	}
 }
 
 // // Editor: selectedText methods
@@ -352,6 +371,9 @@ func (e *Editor) clearSelected() {
 // setSelected sets currently selected areas on every line.
 // e.selected is assumed to have been already initialized with pivot point.
 func (e *Editor) setSelected() {
+	if e.selected == nil {
+		return
+	}
 	cx, cy := e.cursor.x, e.cursor.y
 	px, py := e.selected.pivotX, e.selected.pivotY
 	sel := e.selected
@@ -399,6 +421,40 @@ func (e *Editor) setSelected() {
 	sel.lines = append(sel.lines, slaLast)
 }
 
+// backspaceSelected deletes all selected text.
+func (e *Editor) backspaceSelected() {
+	sel := e.selected
+	if sel.dir == 0 {
+		return
+	}
+
+	// remove selected areas from line buffers
+	for _, sla := range sel.lines {
+		e.lines[sla.y].backspace(sla.start, sla.end)
+	}
+
+	// remove empty lines from editor
+	var lnIdx int
+	var buf []rune
+	offset := 0
+	for _, sla := range sel.lines[1:] {
+		lnIdx = sla.y + offset
+		buf = e.removeLine(lnIdx)
+		offset--
+	}
+
+	// carry remaining text from last line to left boundary
+	if len(buf) > 0 {
+		e.lines[sel.lines[0].y].append(buf)
+	}
+
+	// reposition cursor to left boundary
+	e.setCurCol(sel.lines[0].start)
+	e.cursor.y = sel.lines[0].y
+
+	e.clearSelected()
+}
+
 // // Editor: helper methods
 
 func (e *Editor) setInitState() {
@@ -429,14 +485,14 @@ func (e *Editor) prevLine() *line {
 	return e.lines[e.cursor.y-1]
 }
 
-// removeLine removes the current line and returns its buf.
-func (e *Editor) removeLine() []rune {
-	buf := e.currentLine().buf
+// removeLine removes the line at given idx and returns its buf.
+func (e *Editor) removeLine(idx int) []rune {
+	buf := e.lines[idx].buf
 	// if current line is the last line, reslice.
-	if e.cursor.y == len(e.lines)-1 {
+	if idx == len(e.lines)-1 {
 		e.lines = e.lines[:len(e.lines)-1]
 	} else {
-		e.lines = append(e.lines[:e.cursor.y], e.lines[e.cursor.y+1:]...)
+		e.lines = append(e.lines[:idx], e.lines[idx+1:]...)
 	}
 	return buf
 }
@@ -519,10 +575,9 @@ func (ln *line) writeChar(char rune, cx int) {
 	}
 }
 
-// backspace deletes the char that is to the left of cursor position cx.
-// caller must guarantee cx > 0.
-func (ln *line) backspace(cx int) {
-	ln.buf = append(ln.buf[:cx-1], ln.buf[cx:]...)
+// backspace deletes all chars in buf[start:end].
+func (ln *line) backspace(start, end int) {
+	ln.buf = append(ln.buf[:start], ln.buf[end:]...)
 }
 
 // append appends the contents of buf to its own buffer.

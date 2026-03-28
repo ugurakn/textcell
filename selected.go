@@ -1,9 +1,10 @@
 package textcell
 
 type selectedText struct {
+	// lines must be sorted in ASC order by selectedLnArea.y
 	lines          []*selectedLnArea
 	pivotX, pivotY int
-	dir            byte // 'R' or 'L'
+	dir            byte // 'R' or 'L', '\0' if none
 }
 
 type selectedLnArea struct {
