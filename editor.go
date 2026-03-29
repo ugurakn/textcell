@@ -282,24 +282,34 @@ func (e *Editor) MoveCurByWord(getCharPos func(cp *charPos)) *charPos {
 
 func (e *Editor) CurDown() {
 	if e.cursor.y == len(e.lines)-1 {
+		e.setCurCol(e.currentLine().len())
 		return
 	}
-	e.cursor.down(e.lines[e.cursor.y+1].len())
-	// TEMP because down modifies cursor.x:
-	e.calcScrollX()
+	e.cursor.y++
+	e.setCurCol_noModifGC(min(e.cursor.goalCol, e.currentLine().len()))
 }
 
 func (e *Editor) CurUp() {
 	if e.cursor.y == 0 {
+		e.setCurCol(0)
 		return
 	}
-	e.cursor.up(e.lines[e.cursor.y-1].len())
-	// TEMP because up modifies cursor.x:
+	e.cursor.y--
+	e.setCurCol_noModifGC(min(e.cursor.goalCol, e.currentLine().len()))
+}
+
+// setCurCol sets cursor col to x and modifies
+// goal column and horizontal scroll accordingly.
+func (e *Editor) setCurCol(x int) {
+	e.cursor.x = x
+	e.cursor.goalCol = x
 	e.calcScrollX()
 }
 
-func (e *Editor) setCurCol(x int) {
-	e.cursor.setCol(x)
+// setCurCol_noModifGC is the same as setCurCol except for
+// that it does not modify cursor goal column.
+func (e *Editor) setCurCol_noModifGC(x int) {
+	e.cursor.x = x
 	e.calcScrollX()
 }
 
@@ -616,22 +626,6 @@ func newCursor() *cursor {
 		y:       0,
 		goalCol: 0,
 	}
-}
-
-func (c *cursor) down(lnLen int) {
-	c.y++
-	c.x = min(c.goalCol, lnLen)
-}
-
-func (c *cursor) up(lnLen int) {
-	c.y--
-	c.x = min(c.goalCol, lnLen)
-}
-
-// setCol sets cursor col and goalCol to x.
-func (c *cursor) setCol(x int) {
-	c.x = x
-	c.goalCol = x
 }
 
 func (c *cursor) show(xOffset, yOffset int, screen tcell.Screen) {
