@@ -51,3 +51,10 @@ func WithMaxW(mw int) Option {
 		e.maxWidth = mw
 	}
 }
+
+// WithMaxH returns an option that sets mh as [Editor] max height.
+func WithMaxH(mh int) Option {
+	return func(e *Editor) {
+		e.maxHeight = mh
+	}
+}

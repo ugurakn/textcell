@@ -23,19 +23,23 @@ type Editor struct {
 	screen         tcell.Screen
 	cursor         *cursor
 	selected       *selectedText
-	// maxWidth is the maximum number of visible characters on a line.
-	maxWidth int
-	x, y     int
-	scrollX  int
-	hasFocus bool
+	// maxWidth and maxHeight are the maximum number of visible characters on a line
+	// and maximum number of visible lines on screen, respectively.
+	maxWidth, maxHeight int
+	x, y                int
+	scrollX, scrollY    int
+	hasFocus            bool
 }
 
 // NewEditor creates and returns a new Editor without focus.
-func NewEditor(baseX, baseY, maxWidth int, screen tcell.Screen, opts ...Option) *Editor {
+func NewEditor(baseX, baseY, maxWidth, maxHeight int, screen tcell.Screen, opts ...Option) *Editor {
+	if maxWidth <= 0 || maxHeight <= 0 {
+		panic("maxWidth and maxHeight must be > 0.")
+	}
 	e := new(Editor)
 	e.screen = screen
 	e.x, e.y = baseX, baseY
-	e.maxWidth = maxWidth
+	e.maxWidth, e.maxHeight = maxWidth, maxHeight
 	e.setInitState()
 
 	e.hasFocus = false
@@ -73,21 +77,31 @@ func (e *Editor) String(sep rune) string {
 }
 
 func (e *Editor) ShowText() {
-	for i := range e.lines {
-		e.lines[i].show(e.x, e.y+i, e.scrollX, e.maxWidth, e.styleDefault, e.screen)
+	start := e.scrollY
+	end := min(len(e.lines), e.scrollY+e.maxHeight)
+	for i, ln := range e.lines[start:end] {
+		ln.show(e.x, e.y+i, e.scrollX, e.maxWidth, e.styleDefault, e.screen)
 	}
+
 	if e.selected != nil {
-		e.highlightSelected()
+		e.highlightSelected(start, end)
 	}
 }
 
-// highlight the selected portion of on-screen text.
-func (e *Editor) highlightSelected() {
+// highlightSelected highlights the selected portion of on-screen text.
+func (e *Editor) highlightSelected(fVisibleLn, lVisibleLn int) {
 	var ln *line
-	var offset int
+	var offsetX, offsetY int
 	for _, sla := range e.selected.lines {
+		if sla.y < fVisibleLn {
+			continue
+		}
+		if sla.y >= lVisibleLn {
+			break
+		}
 		ln = e.lines[sla.y]
-		offset = max(0, sla.start-ln.fVisible)
+		offsetX = max(0, sla.start-ln.fVisible)
+		offsetY = sla.y - fVisibleLn
 		for i := sla.start; i < sla.end; i++ {
 			if i < ln.fVisible {
 				continue
@@ -96,13 +110,13 @@ func (e *Editor) highlightSelected() {
 				break
 			}
 			e.screen.SetContent(
-				e.x+offset,
-				e.y+sla.y,
+				e.x+offsetX,
+				e.y+offsetY,
 				ln.buf[i],
 				nil,
 				e.styleHighlight,
 			)
-			offset++
+			offsetX++
 		}
 	}
 }
@@ -114,6 +128,10 @@ func (e *Editor) Show() {
 	if e.hasFocus {
 		e.ShowCursor()
 	}
+}
+
+func (e *Editor) ShowCursor() {
+	e.cursor.show(e.x-e.scrollX, e.y-e.scrollY, e.screen)
 }
 
 // ProcessEvent handles keypress events.
@@ -209,7 +227,7 @@ func (e *Editor) CurRight() {
 			return
 		}
 		e.setCurCol(0)
-		c.y++
+		e.setCurLine(c.y + 1)
 		return
 	}
 	e.setCurCol(c.x + 1)
@@ -223,7 +241,7 @@ func (e *Editor) CurLeft() {
 			return
 		}
 		e.setCurCol(e.prevLine().len())
-		c.y--
+		e.setCurLine(c.y - 1)
 		return
 	}
 	e.setCurCol(c.x - 1)
@@ -234,7 +252,7 @@ func (e *Editor) CurLeft() {
 func (e *Editor) CurRightWord() {
 	cp := e.MoveCurByWord(e.nextCharPos)
 	e.setCurCol(cp.col)
-	e.cursor.y = (cp.ln)
+	e.setCurLine(cp.ln)
 }
 
 // CurLeftWord moves cursor to left by a whole word.
@@ -246,7 +264,7 @@ func (e *Editor) CurLeftWord() {
 		e.nextCharPos(cp)
 	}
 	e.setCurCol(cp.col)
-	e.cursor.y = cp.ln
+	e.setCurLine(cp.ln)
 }
 
 // MoveCurByWord returns charPos for cursor movement by a whole word.
@@ -289,7 +307,7 @@ func (e *Editor) CurDown() {
 		e.setCurCol(e.currentLine().len())
 		return
 	}
-	e.cursor.y++
+	e.setCurLine(e.cursor.y + 1)
 	e.setCurCol_noModifGC(min(e.cursor.goalCol, e.currentLine().len()))
 }
 
@@ -298,7 +316,7 @@ func (e *Editor) CurUp() {
 		e.setCurCol(0)
 		return
 	}
-	e.cursor.y--
+	e.setCurLine(e.cursor.y - 1)
 	e.setCurCol_noModifGC(min(e.cursor.goalCol, e.currentLine().len()))
 }
 
@@ -317,8 +335,11 @@ func (e *Editor) setCurCol_noModifGC(x int) {
 	e.calcScrollX()
 }
 
-func (e *Editor) ShowCursor() {
-	e.cursor.show(e.x-e.scrollX, e.y, e.screen)
+// setCurLine sets cursor line to y and modifies
+// vertical scroll accordingly.
+func (e *Editor) setCurLine(y int) {
+	e.cursor.y = y
+	e.calcScrollY()
 }
 
 // // Editor: line methods
@@ -341,7 +362,7 @@ func (e *Editor) NewLine() {
 	curLine.buf = curLine.buf[:e.cursor.x]
 	// reposition cursor to start of new line
 	e.setCurCol(0)
-	e.cursor.y++
+	e.setCurLine(e.cursor.y + 1)
 }
 
 // WriteChar appends char to current line and moves cursor right.
@@ -365,7 +386,7 @@ func (e *Editor) backspaceToPrevLn() {
 		return
 	}
 	buf := e.removeLine(e.cursor.y)
-	e.cursor.y--
+	e.setCurLine(e.cursor.y - 1)
 	e.setCurCol(e.currentLine().len())
 	if len(buf) > 0 {
 		e.currentLine().append(buf)
@@ -464,7 +485,7 @@ func (e *Editor) backspaceSelected() {
 
 	// reposition cursor to left boundary
 	e.setCurCol(sel.lines[0].start)
-	e.cursor.y = sel.lines[0].y
+	e.setCurLine(sel.lines[0].y)
 
 	e.clearSelected()
 }
@@ -473,9 +494,9 @@ func (e *Editor) backspaceSelected() {
 
 func (e *Editor) setInitState() {
 	e.cursor = newCursor()
-	e.lines = make([]*line, 0, 32)
+	e.lines = make([]*line, 0, e.maxHeight)
 	e.lines = append(e.lines, newLine(e.maxWidth))
-	e.scrollX = 0
+	e.scrollX, e.scrollY = 0, 0
 	e.selected = nil
 }
 
@@ -515,6 +536,12 @@ func (e *Editor) removeLine(idx int) []rune {
 // It should be called after every cursor col change.
 func (e *Editor) calcScrollX() {
 	e.scrollX = max(0, e.cursor.x-e.maxWidth+1)
+}
+
+// calcScrollY calculates vertical scroll position.
+// It should be called after every cursor line change.
+func (e *Editor) calcScrollY() {
+	e.scrollY = max(0, e.cursor.y-e.maxHeight+1)
 }
 
 // nextCharPos modifies cp to represent the char after cp.
