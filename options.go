@@ -10,11 +10,11 @@ type Option func(e *Editor)
 func WithString(s string) Option {
 	return func(e *Editor) {
 		e.lines = e.lines[:0]
-		e.lines = append(e.lines, newLine())
+		e.lines = append(e.lines, newLine(e.maxWidth))
 		ln := e.lines[0]
 		for _, char := range []rune(s) {
 			if char == '\n' {
-				e.lines = append(e.lines, newLine())
+				e.lines = append(e.lines, newLine(e.maxWidth))
 				ln = e.lines[len(e.lines)-1]
 				continue
 			}

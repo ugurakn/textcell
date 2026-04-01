@@ -7,10 +7,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-const (
-	MaxCharsOnLine = 32
-)
-
 // charPos represents a character at a given x(=col) and y(=line) position.
 type charPos struct {
 	ln, col int
@@ -27,16 +23,19 @@ type Editor struct {
 	screen         tcell.Screen
 	cursor         *cursor
 	selected       *selectedText
-	x, y           int
-	scrollX        int
-	hasFocus       bool
+	// maxWidth is the maximum number of visible characters on a line.
+	maxWidth int
+	x, y     int
+	scrollX  int
+	hasFocus bool
 }
 
 // NewEditor creates and returns a new Editor without focus.
-func NewEditor(baseX, baseY int, screen tcell.Screen, opts ...Option) *Editor {
+func NewEditor(baseX, baseY, maxWidth int, screen tcell.Screen, opts ...Option) *Editor {
 	e := new(Editor)
 	e.screen = screen
 	e.x, e.y = baseX, baseY
+	e.maxWidth = maxWidth
 	e.setInitState()
 
 	e.hasFocus = false
@@ -70,7 +69,7 @@ func (e *Editor) String(sep rune) string {
 
 func (e *Editor) ShowText() {
 	for i := range e.lines {
-		e.lines[i].show(e.x, e.y+i, e.scrollX, e.styleDefault, e.screen)
+		e.lines[i].show(e.x, e.y+i, e.scrollX, e.maxWidth, e.styleDefault, e.screen)
 	}
 	if e.selected != nil {
 		e.highlightSelected()
@@ -322,7 +321,7 @@ func (e *Editor) ShowCursor() {
 // NewLine creates a new line under cursor y
 // and moves cursor to new line.
 func (e *Editor) NewLine() {
-	newLn := newLine()
+	newLn := newLine(e.maxWidth)
 	if len(e.lines)-1 == e.cursor.y {
 		e.lines = append(e.lines, newLn)
 	} else {
@@ -470,7 +469,7 @@ func (e *Editor) backspaceSelected() {
 func (e *Editor) setInitState() {
 	e.cursor = newCursor()
 	e.lines = make([]*line, 0, 32)
-	e.lines = append(e.lines, newLine())
+	e.lines = append(e.lines, newLine(e.maxWidth))
 	e.scrollX = 0
 	e.selected = nil
 }
@@ -510,7 +509,7 @@ func (e *Editor) removeLine(idx int) []rune {
 // calcScrollX calculates horizontal scroll position.
 // It should be called after every cursor col change.
 func (e *Editor) calcScrollX() {
-	e.scrollX = max(0, e.cursor.x-MaxCharsOnLine+1)
+	e.scrollX = max(0, e.cursor.x-e.maxWidth+1)
 }
 
 // nextCharPos modifies cp to represent the char after cp.
@@ -567,9 +566,9 @@ type line struct {
 	fVisible, lVisible int
 }
 
-func newLine() *line {
+func newLine(initCap int) *line {
 	ln := new(line)
-	ln.buf = make([]rune, 0, MaxCharsOnLine)
+	ln.buf = make([]rune, 0, initCap)
 	return ln
 }
 
@@ -595,9 +594,9 @@ func (ln *line) append(buf []rune) {
 	ln.buf = append(ln.buf, buf...)
 }
 
-func (ln *line) show(baseX, baseY int, scrollX int, style tcell.Style, screen tcell.Screen) {
+func (ln *line) show(baseX, baseY int, scrollX int, maxWidth int, style tcell.Style, screen tcell.Screen) {
 	ln.fVisible = min(ln.len(), scrollX)
-	ln.lVisible = min(ln.len(), scrollX+MaxCharsOnLine)
+	ln.lVisible = min(ln.len(), scrollX+maxWidth)
 	for i, char := range ln.buf[ln.fVisible:ln.lVisible] {
 		screen.SetContent(
 			baseX+i,

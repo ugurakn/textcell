@@ -38,7 +38,7 @@ func (d *Debug) ShowInfo() {
 func (d *Debug) DrawLineEnd() {
 	for i := range d.e.lines {
 		d.screen.SetContent(
-			d.x+MaxCharsOnLine,
+			d.x+d.e.maxWidth,
 			d.y+i,
 			'|',
 			nil,
