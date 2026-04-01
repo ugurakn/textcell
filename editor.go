@@ -48,10 +48,15 @@ func NewEditor(baseX, baseY, maxWidth int, screen tcell.Screen, opts ...Option) 
 
 // // Editor: Public API
 
-// Reset resets e to its initial state, including original options.
-// To re-initialize with different options, use NewEditor.
-func (e *Editor) Reset() {
+// Reset resets e to its initial state.
+// If any opts are provided, they override current ones.
+// If no opts are provided, old opts are applied.
+// Use Option WithNoOpts to remove all options.
+func (e *Editor) Reset(opts ...Option) {
 	e.setInitState()
+	if len(opts) > 0 {
+		e.opts = opts
+	}
 	e.applyOpts()
 }
 
