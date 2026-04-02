@@ -1,5 +1,10 @@
 package textcell
 
+import (
+	"io"
+	"strings"
+)
+
 type selectedText struct {
 	// lines must be sorted in ASC order by selectedLnArea.y
 	lines          []*selectedLnArea
@@ -39,4 +44,56 @@ func (s *selectedText) calcDirLnCount(cx, cy int) (byte, int) {
 	} else {
 		return 'L', v + 1
 	}
+}
+
+// // Copy buffer
+
+// copyBuf holds the last copied [selectedText].
+type copyBuf struct {
+	buf []rune
+	// wi and ri are the write and read indices, respectively.
+	wi, ri int
+}
+
+func newCopyBuf(size int) *copyBuf {
+	return &copyBuf{
+		buf: make([]rune, size),
+		wi:  0,
+		ri:  0,
+	}
+}
+
+// Debug returns copy buffer as a single-line string.
+func (cb *copyBuf) Debug() string {
+	return strings.ReplaceAll(string(cb.buf[:cb.wi]), "\n", "<LF>")
+}
+
+// readLine returns the next unread line (without LF)
+// as a reslice of copy buffer.
+func (cb *copyBuf) readLine() ([]rune, error) {
+	if cb.ri == cb.wi {
+		return nil, io.EOF
+	}
+	start := cb.ri
+	for i := range cb.buf[start:] {
+		cb.ri++
+		if cb.buf[start+i] == '\n' {
+			// return without LF
+			return cb.buf[start : cb.ri-1], nil
+		}
+	}
+	return cb.buf[start:cb.ri], io.EOF
+}
+
+// writeLine appends the contents of p to copy buffer as a line.
+func (cb *copyBuf) writeLine(p []rune) {
+	if cb.wi != 0 {
+		cb.buf[cb.wi] = '\n'
+		cb.wi++
+	}
+	cb.wi += copy(cb.buf[cb.wi:], p)
+}
+
+func (cb *copyBuf) resetRead() {
+	cb.ri = 0
 }

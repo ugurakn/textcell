@@ -23,10 +23,15 @@ func NewDebug(baseX, baseY int, e *Editor, screen tcell.Screen) *Debug {
 
 func (d *Debug) ShowInfo() {
 	var b strings.Builder
+	cbStr := ""
+	if d.e.cpyBuf != nil {
+		cbStr = d.e.cpyBuf.Debug()
+	}
 	fmt.Fprintf(&b, "logCurPos:(%d,%d) | ", d.e.cursor.x, d.e.cursor.y)
 	fmt.Fprintf(&b, "curLnLen:%d | ", d.e.currentLine().len())
 	fmt.Fprintf(&b, "scrollX:%d | ", d.e.scrollX)
 	fmt.Fprintf(&b, "scrollY:%d | ", d.e.scrollY)
+	fmt.Fprintf(&b, "copyBuf:%q | ", cbStr)
 	// fmt.Fprintf(&b, "curLnFL:(%d,%d) | ", d.e.currentLine().fVisible, d.e.currentLine().lVisible)
 	// fmt.Fprintf(&b, "curLineText:%s | ", string(d.e.currentLine().buf))
 	d.screen.PutStr(

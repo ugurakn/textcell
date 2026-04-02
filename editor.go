@@ -23,6 +23,7 @@ type Editor struct {
 	screen         tcell.Screen
 	cursor         *cursor
 	selected       *selectedText
+	cpyBuf         *copyBuf
 	// maxWidth and maxHeight are the maximum number of visible characters on a line
 	// and maximum number of visible lines on screen, respectively.
 	maxWidth, maxHeight int
@@ -42,6 +43,7 @@ func NewEditor(baseX, baseY, maxWidth, maxHeight int, screen tcell.Screen, opts 
 	e.maxWidth, e.maxHeight = maxWidth, maxHeight
 	e.setInitState()
 
+	e.cpyBuf = nil
 	e.hasFocus = false
 	e.styleDefault = tcell.StyleDefault
 	e.styleHighlight = e.styleDefault.Reverse(true)
@@ -153,7 +155,16 @@ func (e *Editor) ProcessEvent(ev tcell.Event) {
 		}
 		// modCtrl
 		if ev.Modifiers()&tcell.ModCtrl != 0 {
-			modCtrl = true
+			switch ev.Rune() {
+			case 'c', 'C':
+				e.copySelected()
+				return
+			case 'v', 'V':
+				e.pasteCopied()
+				return
+			default:
+				modCtrl = true
+			}
 		}
 
 		switch ev.Key() {
@@ -490,6 +501,55 @@ func (e *Editor) backspaceSelected() {
 	e.clearSelected()
 }
 
+// copySelected copies selected text into [copyBuf].
+func (e *Editor) copySelected() {
+	sel := e.selected
+	if sel == nil || sel.dir == 0 {
+		return
+	}
+
+	getSLABuf := func(sla *selectedLnArea) []rune {
+		return e.lines[sla.y].buf[sla.start:sla.end]
+	}
+
+	size := 0
+	for _, sla := range sel.lines {
+		size += len(getSLABuf(sla))
+	}
+	size += len(sel.lines) - 1 // add space for LFs
+
+	cb := newCopyBuf(size)
+	for _, sla := range sel.lines {
+		cb.writeLine(getSLABuf(sla))
+	}
+
+	e.cpyBuf = cb
+}
+
+// pasteCopied pastes the contents of copyBuf at cursor position.
+func (e *Editor) pasteCopied() {
+	if e.cpyBuf == nil {
+		return
+	}
+
+	b, err := e.cpyBuf.readLine()
+	paste := func() {
+		if len(b) == 0 {
+			return
+		}
+		e.currentLine().insert(b, e.cursor.x)
+		e.setCurCol(e.cursor.x + len(b))
+	}
+	paste()
+	for err == nil {
+		e.NewLine()
+		b, err = e.cpyBuf.readLine()
+		paste()
+	}
+
+	e.cpyBuf.resetRead()
+}
+
 // // Editor: helper methods
 
 func (e *Editor) setInitState() {
@@ -624,6 +684,22 @@ func (ln *line) backspace(start, end int) {
 // append appends the contents of buf to its own buffer.
 func (ln *line) append(buf []rune) {
 	ln.buf = append(ln.buf, buf...)
+}
+
+// insert inserts the contents of buf at cursor col cx.
+func (ln *line) insert(buf []rune, cx int) {
+	if len(buf) == 0 {
+		return
+	}
+
+	if ln.len() == cx {
+		ln.append(buf)
+		return
+	}
+
+	ln.buf = append(ln.buf, make([]rune, len(buf))...)
+	copy(ln.buf[cx+len(buf):], ln.buf[cx:])
+	copy(ln.buf[cx:], buf)
 }
 
 func (ln *line) show(baseX, baseY int, scrollX int, maxWidth int, style tcell.Style, screen tcell.Screen) {
