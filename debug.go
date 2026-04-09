@@ -25,7 +25,7 @@ func (d *Debug) ShowInfo() {
 	var b strings.Builder
 	cbStr := ""
 	if d.e.cpyBuf != nil {
-		cbStr = d.e.cpyBuf.Debug()
+		cbStr = d.e.cpyBuf.debug()
 	}
 	fmt.Fprintf(&b, "logCurPos:(%d,%d) | ", d.e.cursor.x, d.e.cursor.y)
 	fmt.Fprintf(&b, "curLnLen:%d | ", d.e.currentLine().len())

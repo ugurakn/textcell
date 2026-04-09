@@ -63,8 +63,8 @@ func newCopyBuf(size int) *copyBuf {
 	}
 }
 
-// Debug returns copy buffer as a single-line string.
-func (cb *copyBuf) Debug() string {
+// debug returns copy buffer as a single-line string.
+func (cb *copyBuf) debug() string {
 	return strings.ReplaceAll(string(cb.buf[:cb.wi]), "\n", "<LF>")
 }
 

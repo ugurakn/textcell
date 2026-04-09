@@ -169,43 +169,43 @@ func (e *Editor) ProcessEvent(ev tcell.Event) {
 
 		switch ev.Key() {
 		case tcell.KeyRune:
-			e.WriteChar(ev.Rune())
+			e.writeChar(ev.Rune())
 		case tcell.KeyRight:
 			if e.selected != nil && !modShift {
 				e.clearSelected()
 			}
 			if modCtrl {
-				e.CurRightWord()
+				e.curRightWord()
 				break
 			}
-			e.CurRight()
+			e.curRight()
 		case tcell.KeyLeft:
 			if e.selected != nil && !modShift {
 				e.clearSelected()
 			}
 			if modCtrl {
-				e.CurLeftWord()
+				e.curLeftWord()
 				break
 			}
-			e.CurLeft()
+			e.curLeft()
 		case tcell.KeyDown:
 			if e.selected != nil && !modShift {
 				e.clearSelected()
 			}
-			e.CurDown()
+			e.curDown()
 		case tcell.KeyUp:
 			if e.selected != nil && !modShift {
 				e.clearSelected()
 			}
-			e.CurUp()
+			e.curUp()
 		case tcell.KeyBackspace:
 			if e.selected != nil {
 				e.backspaceSelected()
 				break
 			}
-			e.Backspace()
+			e.backspace()
 		case tcell.KeyEnter:
-			e.NewLine()
+			e.newLine()
 		case tcell.KeyESC:
 			e.Unfocus()
 		}
@@ -230,7 +230,7 @@ func (e *Editor) HasFocus() bool {
 
 // // Editor: cursor methods
 
-func (e *Editor) CurRight() {
+func (e *Editor) curRight() {
 	c := e.cursor
 	if c.x == e.currentLine().len() {
 		// move to next line if it exists
@@ -244,7 +244,7 @@ func (e *Editor) CurRight() {
 	e.setCurCol(c.x + 1)
 }
 
-func (e *Editor) CurLeft() {
+func (e *Editor) curLeft() {
 	c := e.cursor
 	if c.x == 0 {
 		// move to prev line if it exists
@@ -258,18 +258,18 @@ func (e *Editor) CurLeft() {
 	e.setCurCol(c.x - 1)
 }
 
-// CurRightWord moves cursor to right by a whole word.
+// curRightWord moves cursor to right by a whole word.
 // A word is defined as any contiguous sequence of letters and digits.
-func (e *Editor) CurRightWord() {
-	cp := e.MoveCurByWord(e.nextCharPos)
+func (e *Editor) curRightWord() {
+	cp := e.moveCurByWord(e.nextCharPos)
 	e.setCurCol(cp.col)
 	e.setCurLine(cp.ln)
 }
 
-// CurLeftWord moves cursor to left by a whole word.
+// curLeftWord moves cursor to left by a whole word.
 // A word is defined as any contiguous sequence of letters and digits.
-func (e *Editor) CurLeftWord() {
-	cp := e.MoveCurByWord(e.prevCharPos)
+func (e *Editor) curLeftWord() {
+	cp := e.moveCurByWord(e.prevCharPos)
 	// move onto first char of word if possible
 	if cp.char != 0 {
 		e.nextCharPos(cp)
@@ -278,10 +278,10 @@ func (e *Editor) CurLeftWord() {
 	e.setCurLine(cp.ln)
 }
 
-// MoveCurByWord returns charPos for cursor movement by a whole word.
+// moveCurByWord returns charPos for cursor movement by a whole word.
 //
 // (right: word_ left: _word if possible to move beyond word)
-func (e *Editor) MoveCurByWord(getCharPos func(cp *charPos)) *charPos {
+func (e *Editor) moveCurByWord(getCharPos func(cp *charPos)) *charPos {
 	cp := &charPos{ln: e.cursor.y, col: e.cursor.x}
 	processChar := func() bool {
 		getCharPos(cp)
@@ -313,7 +313,7 @@ func (e *Editor) MoveCurByWord(getCharPos func(cp *charPos)) *charPos {
 	return cp
 }
 
-func (e *Editor) CurDown() {
+func (e *Editor) curDown() {
 	if e.cursor.y == len(e.lines)-1 {
 		e.setCurCol(e.currentLine().len())
 		return
@@ -322,7 +322,7 @@ func (e *Editor) CurDown() {
 	e.setCurCol_noModifGC(min(e.cursor.goalCol, e.currentLine().len()))
 }
 
-func (e *Editor) CurUp() {
+func (e *Editor) curUp() {
 	if e.cursor.y == 0 {
 		e.setCurCol(0)
 		return
@@ -355,9 +355,9 @@ func (e *Editor) setCurLine(y int) {
 
 // // Editor: line methods
 
-// NewLine creates a new line under cursor y
+// newLine creates a new line under cursor y
 // and moves cursor to new line.
-func (e *Editor) NewLine() {
+func (e *Editor) newLine() {
 	newLn := newLine(e.maxWidth)
 	if len(e.lines)-1 == e.cursor.y {
 		e.lines = append(e.lines, newLn)
@@ -376,19 +376,19 @@ func (e *Editor) NewLine() {
 	e.setCurLine(e.cursor.y + 1)
 }
 
-// WriteChar appends char to current line and moves cursor right.
-func (e *Editor) WriteChar(char rune) {
+// writeChar appends char to current line and moves cursor right.
+func (e *Editor) writeChar(char rune) {
 	e.currentLine().writeChar(char, e.cursor.x)
-	e.CurRight()
+	e.curRight()
 }
 
-func (e *Editor) Backspace() {
+func (e *Editor) backspace() {
 	if e.cursor.x == 0 {
 		e.backspaceToPrevLn()
 		return
 	}
 	e.currentLine().backspace(e.cursor.x-1, e.cursor.x)
-	e.CurLeft()
+	e.curLeft()
 }
 
 // backspaceToPrevLn assumes cursor col is 0.
@@ -542,7 +542,7 @@ func (e *Editor) pasteCopied() {
 	}
 	paste()
 	for err == nil {
-		e.NewLine()
+		e.newLine()
 		b, err = e.cpyBuf.readLine()
 		paste()
 	}
